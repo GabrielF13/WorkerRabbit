@@ -1,8 +1,8 @@
 using MongoDB.Driver;
 using RabbitMQ.Client;
-using RabbitMQ.Client.Events;  // Adicionado para EventingBasicConsumer
-using System.Text;  // Adicionado para Encoding
-using System.Text.Json;  // Adicionado para JsonSerializer
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Text.Json;
 using WorkerRabbit.Models;
 using WorkerRabbit.Services.Interfaces;
 
@@ -28,7 +28,6 @@ namespace WorkerRabbit
             _configuration = configuration;
             _emailService = emailService;
 
-            // Configurar MongoDB para logs (se fornecido)
             _mongoEnabled = mongoClient != null &&
                             !string.IsNullOrEmpty(_configuration["MongoDB:DatabaseName"]) &&
                             !string.IsNullOrEmpty(_configuration["MongoDB:CollectionName"]);
@@ -59,7 +58,6 @@ namespace WorkerRabbit
                     UserName = _configuration["RabbitMQ:UserName"] ?? "guest",
                     Password = _configuration["RabbitMQ:Password"] ?? "guest",
                     VirtualHost = _configuration["RabbitMQ:VirtualHost"] ?? "/",
-                    // Aumenta a resiliência da conexão
                     AutomaticRecoveryEnabled = true,
                     NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
                 };
@@ -67,28 +65,24 @@ namespace WorkerRabbit
                 _connection = factory.CreateConnection();
                 _channel = _connection.CreateModel();
 
-                // Declarar exchange (garante que existe)
                 _channel.ExchangeDeclare(
                     exchange: "notification_exchange",
                     type: "topic",
                     durable: true,
                     autoDelete: false);
 
-                // Declarar fila
                 _channel.QueueDeclare(
                     queue: "notification_queue",
                     durable: true,
                     exclusive: false,
                     autoDelete: false);
 
-                // Vincular fila ao exchange com routing key
                 _channel.QueueBind(
                     queue: "notification_queue",
                     exchange: "notification_exchange",
                     routingKey: "notifications");
 
-                // Definir QoS (Quality of Service)
-                // prefetchCount: 1 = processe apenas uma mensagem por vez
+
                 _channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
 
                 _logger.LogInformation("Conexão com RabbitMQ estabelecida com sucesso");
@@ -96,7 +90,7 @@ namespace WorkerRabbit
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao inicializar conexão com RabbitMQ");
-                throw; // Interrompe o worker se não conseguir conectar ao RabbitMQ
+                throw;
             }
         }
 
@@ -104,10 +98,8 @@ namespace WorkerRabbit
         {
             stoppingToken.ThrowIfCancellationRequested();
 
-            // Configurar consumer
             var consumer = new EventingBasicConsumer(_channel);
 
-            // Configurar callback para mensagens recebidas
             consumer.Received += async (model, ea) =>
             {
                 var body = ea.Body.ToArray();
@@ -152,7 +144,7 @@ namespace WorkerRabbit
                         _logger.LogError($"Notificação {notification.Id} falhou.");
                         if (_mongoEnabled && _notificationLogs != null)
                         {
-                            notification.ErrorMessage = "Excedido número máximo de tentativas";
+                            notification.ErrorMessage = "Envio de notificação falhou";
                             await _notificationLogs.InsertOneAsync(notification);
                         }
 
@@ -162,14 +154,13 @@ namespace WorkerRabbit
                 catch (JsonException jsonEx)
                 {
                     _logger.LogError(jsonEx, "Erro ao deserializar mensagem de notificação");
-                    // Formato inválido - descartar mensagem
+
                     _channel.BasicReject(deliveryTag: ea.DeliveryTag, requeue: false);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Erro ao processar mensagem de notificação: {ex.Message}");
 
-                    // Registrar falha no MongoDB se estiver configurado
                     if (notification != null && _mongoEnabled && _notificationLogs != null)
                     {
                         notification.ErrorMessage = ex.Message;
@@ -177,15 +168,13 @@ namespace WorkerRabbit
                         await _notificationLogs.InsertOneAsync(notification);
                     }
 
-                    // Recolocar na fila para nova tentativa
                     _channel.BasicNack(deliveryTag: ea.DeliveryTag, multiple: false, requeue: true);
                 }
             };
 
-            // Iniciar consumo de mensagens
             _channel.BasicConsume(
                 queue: "notification_queue",
-                autoAck: false, // Importante: não confirmar automaticamente
+                autoAck: false, 
                 consumer: consumer);
 
             _logger.LogInformation("Worker iniciado e aguardando mensagens...");
@@ -196,8 +185,7 @@ namespace WorkerRabbit
         public override Task StopAsync(CancellationToken cancellationToken)
         {
             _channel?.Close();
-            _connection?.Close();  // Alterado de CloseAsync para Close, pois é o método disponível na interface
-
+            _connection?.Close();
             _logger.LogInformation("Worker de notificações parado");
 
             return base.StopAsync(cancellationToken);

@@ -16,7 +16,6 @@ public class Program
             {
                 services.AddSingleton<IEmailService, EmailService>();
 
-                // Configuração do MongoDB (se as configurações estiverem presentes)
                 var mongoConnectionString = hostContext.Configuration["MongoDB:ConnectionString"];
                 if (!string.IsNullOrEmpty(mongoConnectionString))
                 {
@@ -31,7 +30,6 @@ public class Program
                     catch (Exception ex)
                     {
                         Console.WriteLine($"Erro ao configurar MongoDB: {ex.Message}");
-                        // Continuar sem MongoDB
                     }
                 }
                 else
@@ -39,7 +37,6 @@ public class Program
                     Console.WriteLine("String de conexão do MongoDB não configurada");
                 }
 
-                // Registrar o serviço worker
                 services.AddHostedService<Worker>();
             })
             .UseWindowsService(); 

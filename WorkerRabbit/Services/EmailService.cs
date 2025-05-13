@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Mail;
+﻿using System.Net.Mail;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 using WorkerRabbit.Models;
 using WorkerRabbit.Services.Interfaces;
 
@@ -25,7 +20,6 @@ namespace WorkerRabbit.Services
         {
             try
             {
-                // Obter configurações de e-mail do appsettings.json
                 var smtpServer = _configuration["Email:SmtpServer"];
                 var smtpPort = int.Parse(_configuration["Email:SmtpPort"]);
                 var smtpUsername = _configuration["Email:Username"];
@@ -38,7 +32,6 @@ namespace WorkerRabbit.Services
                     return false;
                 }
 
-                // Preparar cliente SMTP
                 using var client = new SmtpClient(smtpServer, smtpPort)
                 {
                     EnableSsl = true,
@@ -46,7 +39,6 @@ namespace WorkerRabbit.Services
                     DeliveryMethod = SmtpDeliveryMethod.Network
                 };
 
-                // Configurar e-mail com base no tipo de notificação
                 var mailMessage = CreateEmailMessage(notification, senderEmail);
 
                 if (mailMessage == null)
@@ -55,7 +47,6 @@ namespace WorkerRabbit.Services
                     return false;
                 }
 
-                // Enviar e-mail
                 await client.SendMailAsync(mailMessage);
 
                 _logger.LogInformation($"E-mail enviado com sucesso para {mailMessage.To[0]} - Tipo: {notification.Type}");
@@ -70,7 +61,6 @@ namespace WorkerRabbit.Services
 
         private MailMessage CreateEmailMessage(NotificationEvent notification, string senderEmail)
         {
-            // Verifica se os dados necessários estão presentes
             if (!notification.Data.ContainsKey("UserEmail"))
             {
                 _logger.LogError("E-mail do usuário não fornecido nos dados da notificação");
@@ -83,7 +73,6 @@ namespace WorkerRabbit.Services
             string subject;
             string body;
 
-            // Configuração do e-mail com base no tipo de notificação
             switch (notification.Type)
             {
                 case NotificationType.UserRegistration:
@@ -120,26 +109,6 @@ namespace WorkerRabbit.Services
                         </html>";
                     break;
 
-                //case NotificationType.PaymentReceived:
-                //    if (!notification.Data.ContainsKey("OrderId"))
-                //    {
-                //        _logger.LogError("ID do pedido não fornecido nos dados da notificação");
-                //        return null;
-                //    }
-
-                //    subject = $"Pagamento Confirmado - Pedido #{notification.Data["OrderId"]}";
-                //    body = $@"
-                //        <html>
-                //        <body>
-                //            <h2>Olá {userName}!</h2>
-                //            <p>O pagamento do seu pedido #{notification.Data["OrderId"]} foi confirmado.</p>
-                //            <p>Seu pedido está sendo processado e em breve será enviado.</p>
-                //            <br/>
-                //            <p>Atenciosamente,<br/>Equipe de Notificações</p>
-                //        </body>
-                //        </html>";
-                //    break;
-
                 default:
                     _logger.LogError($"Tipo de notificação não suportado: {notification.Type}");
                     return null;
@@ -150,7 +119,7 @@ namespace WorkerRabbit.Services
                 From = new MailAddress(senderEmail, "Sistema de Notificações"),
                 Subject = subject,
                 Body = body,
-                IsBodyHtml = true // Habilitando HTML para mensagens mais atrativas
+                IsBodyHtml = true 
             };
 
             mailMessage.To.Add(recipientEmail);
